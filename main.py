@@ -9,7 +9,8 @@ import pyautogui
 import ctypes
 import platform
 import requests
-
+import weather
+import app_control
 
 NEWS_API_KEY = "acdd2f2873824cb5a06d67ee3ad16fce"
 
@@ -86,6 +87,34 @@ def processCommand(c):
    elif "open linkedin" in c_lower:
         speak("Opening LinkedIn")
         webbrowser.open("https://www.linkedin.com/feed/")
+  
+   elif c_lower.startswith("open "):
+
+        app_name = c_lower.replace("open ", "", 1).strip()
+
+        if app_name in app_control.APPS:
+
+            app_control.open_app(app_name, speak)
+
+        else:
+
+            # જો application list માં નથી
+            return False
+        return False
+        
+   elif c_lower.startswith("close "):
+
+    app_name = c_lower.replace("close ", "", 1).strip()
+                                       
+    if app_name in app_control.APPS:
+
+        app_control.close_app(app_name, speak)
+
+    else:
+
+        speak(f"I don't know how to close {app_name}")
+
+    return False     
 # date time
 
    elif "time" in c_lower:
@@ -105,7 +134,7 @@ def processCommand(c):
    
    elif "open desktop" in c_lower:
     speak("Opening Desktop")
-    os.startfile(r"C:\Users\YOUR_NAME\Desktop")
+    os.startfile(r"C:\Users\Public\Desktop")
     
    elif "shutdown computer" in c_lower:
     speak("Shutting down computer")
@@ -202,7 +231,27 @@ def processCommand(c):
    elif "stop" in c_lower or "exit" in c_lower or "quit" in c_lower:
        speak("Goodbye")
        return True
-       
+   
+#  ============= weather command =================
+   elif "weather" in c_lower:
+
+    # command માંથી city કાઢવી
+    city = c_lower.replace("what is the weather in", "")
+    city = city.replace("what's the weather in", "")
+    city = city.replace("weather in", "")
+    city = city.replace("weather at", "")
+    city = city.replace("weather of", "")
+    city = city.replace("?", "")
+    city = city.strip()
+
+    if city:
+        weather.get_weather(city, speak)
+    else:
+        speak("Please say the city name.")
+
+    return False
+
+
    return False
 #    elif c.lower().startswith("play"):
 #        song=c.lower().split(" ")[1]
