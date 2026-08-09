@@ -9,13 +9,32 @@ import pyautogui
 import ctypes
 import platform
 import requests
+import weather
+import app_control
 
+# Set Chrome as the default browser for all URL opens
+chrome_path = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+if os.path.exists(chrome_path):
+    webbrowser.register('chrome', None, webbrowser.BackgroundBrowser(chrome_path))
+    chrome_browser = webbrowser.get('chrome')
+    print("Chrome browser registered successfully.")
+else:
+    chrome_browser = None
+    print("Warning: Chrome not found. Using default browser.")
+
+def open_in_chrome(url):
+    """Open a URL in Chrome. Falls back to default browser if Chrome not found."""
+    if chrome_browser:
+        chrome_browser.open(url)
+    else:
+        webbrowser.open(url)
 
 NEWS_API_KEY = "acdd2f2873824cb5a06d67ee3ad16fce"
 
 
 recognizer = sr.Recognizer()
 engine = pyttsx3.init()
+
 
 
 def get_microphone_index():
@@ -69,23 +88,38 @@ def processCommand(c):
    c_lower = c.lower()
    if "open google" in c_lower:
        speak("Opening Google")
-       webbrowser.open("https://www.google.com")
+       open_in_chrome("https://www.google.com")
    elif "open youtube" in c_lower:
        speak("Opening YouTube")
-       webbrowser.open("https://www.youtube.com")
+       open_in_chrome("https://www.youtube.com")
    elif "open facebook" in c_lower:
        speak("Opening Facebook")
-       webbrowser.open("https://www.facebook.com")
+       open_in_chrome("https://www.facebook.com")
    elif (
         "open github" in c_lower or
         "open git hub" in c_lower or
         "github" in c_lower):
         speak("Opening GitHub")
-        webbrowser.open("https://github.com/umangpkaklotar?tab=repositories")
+        open_in_chrome("https://github.com/umangpkaklotar?tab=repositories")
         
    elif "open linkedin" in c_lower:
         speak("Opening LinkedIn")
-        webbrowser.open("https://www.linkedin.com/feed/")
+        open_in_chrome("https://www.linkedin.com/feed/")
+  
+   elif c_lower.startswith("open "):
+       app_name = c_lower.replace("open ", "", 1).strip()
+       if app_name in app_control.APPS:
+           app_control.open_app(app_name, speak)
+       else:
+           speak(f"I don't know how to open {app_name}")
+
+   elif c_lower.startswith("close "):
+       app_name = c_lower.replace("close ", "", 1).strip()
+       if app_name in app_control.APPS or app_name in app_control.BROWSER_APPS:
+           app_control.close_app(app_name, speak)
+       else:
+           speak(f"I don't know how to close {app_name}")
+           print(f"Unknown app to close: '{app_name}'")
 # date time
 
    elif "time" in c_lower:
@@ -105,7 +139,7 @@ def processCommand(c):
    
    elif "open desktop" in c_lower:
     speak("Opening Desktop")
-    os.startfile(r"C:\Users\YOUR_NAME\Desktop")
+    os.startfile(r"C:\Users\Public\Desktop")
     
    elif "shutdown computer" in c_lower:
     speak("Shutting down computer")
@@ -157,7 +191,7 @@ def processCommand(c):
 
     if song in musicLibrary.music:
         speak(f"Playing {song}")
-        webbrowser.open(musicLibrary.music[song])
+        open_in_chrome(musicLibrary.music[song])
     else:
         speak("Song not found in library. Playing from YouTube.")
         pywhatkit.playonyt(song)
@@ -166,7 +200,7 @@ def processCommand(c):
    elif "search youtube" in c_lower:
     query = c_lower.replace("search youtube", "").strip()
     speak(f"Searching YouTube for {query}")
-    webbrowser.open(f"https://www.youtube.com/results?search_query={query}" )
+    open_in_chrome(f"https://www.youtube.com/results?search_query={query}")
    
         
    elif "send whatsapp message" in c_lower:
@@ -202,7 +236,27 @@ def processCommand(c):
    elif "stop" in c_lower or "exit" in c_lower or "quit" in c_lower:
        speak("Goodbye")
        return True
-       
+   
+#  ============= weather command =================
+   elif "weather" in c_lower:
+       # Extract city name from various command patterns
+       city = c_lower.replace("what is the weather in", "")
+       city = city.replace("what's the weather in", "")
+       city = city.replace("weather in", "")
+       city = city.replace("weather at", "")
+       city = city.replace("weather of", "")
+       city = city.replace("weather", "")
+       city = city.replace("?", "")
+       city = city.strip()
+
+       print(f"Weather command detected. City extracted: '{city}'")
+
+       if city:
+           weather.get_weather(city, speak)
+       else:
+           speak("Please say the city name. For example, say weather in Surat.")
+
+
    return False
 #    elif c.lower().startswith("play"):
 #        song=c.lower().split(" ")[1]
