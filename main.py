@@ -9,25 +9,7 @@ import pyautogui
 import ctypes
 import platform
 import requests
-import weather
-import app_control
 
-# Set Chrome as the default browser for all URL opens
-chrome_path = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
-if os.path.exists(chrome_path):
-    webbrowser.register('chrome', None, webbrowser.BackgroundBrowser(chrome_path))
-    chrome_browser = webbrowser.get('chrome')
-    print("Chrome browser registered successfully.")
-else:
-    chrome_browser = None
-    print("Warning: Chrome not found. Using default browser.")
-
-def open_in_chrome(url):
-    """Open a URL in Chrome. Falls back to default browser if Chrome not found."""
-    if chrome_browser:
-        chrome_browser.open(url)
-    else:
-        webbrowser.open(url)
 
 NEWS_API_KEY = "acdd2f2873824cb5a06d67ee3ad16fce"
 
@@ -104,22 +86,7 @@ def processCommand(c):
         
    elif "open linkedin" in c_lower:
         speak("Opening LinkedIn")
-        open_in_chrome("https://www.linkedin.com/feed/")
-  
-   elif c_lower.startswith("open "):
-       app_name = c_lower.replace("open ", "", 1).strip()
-       if app_name in app_control.APPS:
-           app_control.open_app(app_name, speak)
-       else:
-           speak(f"I don't know how to open {app_name}")
-
-   elif c_lower.startswith("close "):
-       app_name = c_lower.replace("close ", "", 1).strip()
-       if app_name in app_control.APPS or app_name in app_control.BROWSER_APPS:
-           app_control.close_app(app_name, speak)
-       else:
-           speak(f"I don't know how to close {app_name}")
-           print(f"Unknown app to close: '{app_name}'")
+        webbrowser.open("https://www.linkedin.com/feed/")
 # date time
 
    elif "time" in c_lower:
@@ -236,27 +203,7 @@ def processCommand(c):
    elif "stop" in c_lower or "exit" in c_lower or "quit" in c_lower:
        speak("Goodbye")
        return True
-   
-#  ============= weather command =================
-   elif "weather" in c_lower:
-       # Extract city name from various command patterns
-       city = c_lower.replace("what is the weather in", "")
-       city = city.replace("what's the weather in", "")
-       city = city.replace("weather in", "")
-       city = city.replace("weather at", "")
-       city = city.replace("weather of", "")
-       city = city.replace("weather", "")
-       city = city.replace("?", "")
-       city = city.strip()
-
-       print(f"Weather command detected. City extracted: '{city}'")
-
-       if city:
-           weather.get_weather(city, speak)
-       else:
-           speak("Please say the city name. For example, say weather in Surat.")
-
-
+       
    return False
 #    elif c.lower().startswith("play"):
 #        song=c.lower().split(" ")[1]
