@@ -9,6 +9,7 @@ import pyautogui
 import ctypes
 import platform
 import requests
+from app_control import AppController, parse_open_close_command, open_in_chrome
 
 
 NEWS_API_KEY = "acdd2f2873824cb5a06d67ee3ad16fce"
@@ -17,6 +18,8 @@ NEWS_API_KEY = "acdd2f2873824cb5a06d67ee3ad16fce"
 recognizer = sr.Recognizer()
 engine = pyttsx3.init()
 
+# Initialize the application/window controller
+controller = AppController()
 
 
 def get_microphone_index():
@@ -68,69 +71,51 @@ def speak(text):
 
 def processCommand(c):
    c_lower = c.lower()
-   if "open google" in c_lower:
-       speak("Opening Google")
-       open_in_chrome("https://www.google.com")
-   elif "open youtube" in c_lower:
-       speak("Opening YouTube")
-       open_in_chrome("https://www.youtube.com")
-   elif "open facebook" in c_lower:
-       speak("Opening Facebook")
-       open_in_chrome("https://www.facebook.com")
-   elif (
-        "open github" in c_lower or
-        "open git hub" in c_lower or
-        "github" in c_lower):
-        speak("Opening GitHub")
-        open_in_chrome("https://github.com/umangpkaklotar?tab=repositories")
-        
-   elif "open linkedin" in c_lower:
-        speak("Opening LinkedIn")
-        webbrowser.open("https://www.linkedin.com/feed/")
-# date time
 
-   elif "time" in c_lower:
+   # ------------------------------------------------------------------
+   # 1) Try the new open/close handler first (websites + desktop apps)
+   #    This handles: open/close/launch/exit/start YouTube, Notepad, etc.
+   # ------------------------------------------------------------------
+   if controller.handle_command(c, speak):
+       return False
+
+   # ------------------------------------------------------------------
+   # 2) Existing commands (all preserved as-is, with voice confirmations)
+   # ------------------------------------------------------------------
+
+# date time
+   if "time" in c_lower:
     current = datetime.now().strftime("%I:%M %p")
     speak(f"The time is {current}")
 
 # screenshot 
    elif "take a screenshot" in c_lower:
-    speak("Take a Screenshot")
+    speak("Taking a screenshot.")
     image = pyautogui.screenshot()
     image.save("screenshot.png")
-    speak("Screenshot Saved")
+    speak("Screenshot saved.")
 
-    # application commands
-   elif "open notepad" in c_lower:
-        os.system("notepad")
-   
    elif "open desktop" in c_lower:
-    speak("Opening Desktop")
+    speak("Opening Desktop.")
     os.startfile(r"C:\Users\Public\Desktop")
-    
+     
    elif "shutdown computer" in c_lower:
-    speak("Shutting down computer")
+    speak("Shutting down computer.")
     os.system("shutdown /s /t 5")
     # cancel shutdown
    elif "cancel shutdown" in c_lower:
     os.system("shutdown /a")
-    speak("Shutdown cancelled")
+    speak("Shutdown cancelled.")
 
 # lock computer
    elif "lock computer" in c_lower:
-    speak("Lock Computer")
+    speak("Locking computer.")
     ctypes.windll.user32.LockWorkStation()
 
-   elif "open calculator" in c_lower:
-    os.system("calc")
-
-   elif "open paint" in c_lower:
-    os.system("mspaint")
-   
 # news mate 
    elif "news" in c_lower:
     try:
-        speak("Getting today's news")
+        speak("Getting today's news.")
 
         url = "https://newsapi.org/v2/top-headlines?country=in&apiKey=acdd2f2873824cb5a06d67ee3ad16fce"
 
@@ -157,21 +142,23 @@ def processCommand(c):
     song = c[play_idx + 4:].strip().lower()
 
     if song in musicLibrary.music:
-        speak(f"Playing {song}")
+        speak(f"Playing {song}.")
         open_in_chrome(musicLibrary.music[song])
     else:
-        speak("Song not found in library. Playing from YouTube.")
-        pywhatkit.playonyt(song)
+        speak(f"Playing {song}.")
+        if not controller.play_on_youtube(song):
+            speak("Sorry, I could not play that on YouTube.")
    
    
    elif "search youtube" in c_lower:
     query = c_lower.replace("search youtube", "").strip()
-    speak(f"Searching YouTube for {query}")
+    speak(f"Searching YouTube for {query}.")
     open_in_chrome(f"https://www.youtube.com/results?search_query={query}")
    
         
    elif "send whatsapp message" in c_lower:
-       speak("Whom should I send the message to")
+       speak("Sending WhatsApp message.")
+       speak("Whom should I send the message to?")
        with sr.Microphone(device_index=mic_index) as source:
            print("Listening contact name...")
            audio = recognizer.listen(source)
@@ -185,7 +172,7 @@ def processCommand(c):
        }
  
        if name in contacts:
-           speak("What should I send")
+           speak("What should I send?")
            with sr.Microphone(device_index=mic_index) as source:
                print("Listening message...")
                audio = recognizer.listen(source)
@@ -196,19 +183,16 @@ def processCommand(c):
                message,
                wait_time=10
            )
-           speak("Message sent")
+           speak("Message sent.")
        else:
-           speak("Contact not found")
+           speak("Contact not found.")
            
    elif "stop" in c_lower or "exit" in c_lower or "quit" in c_lower:
-       speak("Goodbye")
+       speak("Goodbye.")
+       controller.cleanup()
        return True
        
    return False
-#    elif c.lower().startswith("play"):
-#        song=c.lower().split(" ")[1]
-#        link= musicLibrary.music[song]
-#        webbrowser.open(link)
 
 if __name__ == "__main__":
     speak("initializing jarvis...")

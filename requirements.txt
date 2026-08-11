@@ -4,3 +4,5 @@ pyttsx3==2.98
 pywhatkit==5.4
 requests==2.32.3
 pyautogui==0.9.54
+selenium>=4.20.0
+webdriver-manager>=4.0.0
