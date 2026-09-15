@@ -9,7 +9,11 @@ import pyautogui
 import ctypes
 import platform
 import requests
+from dotenv import load_dotenv
+
+load_dotenv()
 from app_control import AppController, parse_open_close_command, open_in_chrome
+import phone_control
 
 
 NEWS_API_KEY = "acdd2f2873824cb5a06d67ee3ad16fce"
@@ -73,14 +77,49 @@ def processCommand(c):
    c_lower = c.lower()
 
    # ------------------------------------------------------------------
-   # 1) Try the new open/close handler first (websites + desktop apps)
-   #    This handles: open/close/launch/exit/start YouTube, Notepad, etc.
+   # 1) Intercept Phone Commands First
+   # ------------------------------------------------------------------
+   phone_phrases = ["on my phone", "on phone", "in my phone", "in phone"]
+   is_phone_cmd = any(phrase in c_lower for phrase in phone_phrases)
+
+   if "check my phone connection" in c_lower or "check phone connection" in c_lower:
+       speak("Checking phone connection.")
+       result = phone_control.check_connection()
+       if result.get("success"):
+           speak("Your phone is connected.")
+       else:
+           msg = result.get("message", "I cannot connect to your phone.")
+           speak(msg)
+       return False
+
+   if is_phone_cmd and ("open" in c_lower or "launch" in c_lower or "start" in c_lower):
+       # Extract app name
+       cmd_clean = c_lower
+       for phrase in phone_phrases:
+           cmd_clean = cmd_clean.replace(phrase, "")
+       cmd_clean = cmd_clean.replace("open", "").replace("launch", "").replace("start", "").strip()
+       
+       if not cmd_clean:
+           speak("I didn't catch the app name to open on your phone.")
+           return False
+
+       speak(f"Opening {cmd_clean} on your phone.")
+       result = phone_control.open_phone_app(cmd_clean)
+       
+       if not result.get("success"):
+           msg = result.get("message", f"I could not open {cmd_clean} on your phone.")
+           speak(msg)
+       return False
+
+   # ------------------------------------------------------------------
+   # 2) Try the PC open/close handler next (websites + desktop apps)
    # ------------------------------------------------------------------
    if controller.handle_command(c, speak):
        return False
 
+
    # ------------------------------------------------------------------
-   # 2) Existing commands (all preserved as-is, with voice confirmations)
+   # 3) Existing commands (all preserved as-is, with voice confirmations)
    # ------------------------------------------------------------------
 
 # date time

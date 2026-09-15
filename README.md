@@ -304,3 +304,19 @@ This project is developed for **learning and educational purposes**.
 Feel free to fork, modify, and improve it.
 
 ⭐ **Star this repository** if you found it useful!
+
+---
+
+## 📱 JARVIS Phone Control Setup Guide
+
+1. Connect your PC and Android phone to the **same Wi-Fi network** (e.g. 192.168.1.x).
+2. Open the **JARVIS Phone** app on your Android device.
+3. The Android app will display its IP address on the screen.
+4. Copy that IP address.
+5. Open the `.env` file on your PC.
+6. Set `PHONE_IP=<phone IP shown in Android app>`.
+7. Ensure `PHONE_PORT=8080`.
+8. Ensure `PHONE_TOKEN` matches the secure token configured in the Android app.
+9. Start Jarvis using: `python main.py`
+10. Say: **"Check my phone connection"**
+11. Jarvis will verbally confirm if the connection is successful!
