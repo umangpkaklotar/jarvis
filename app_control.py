@@ -12,6 +12,19 @@ import subprocess
 import time
 import re
 import os
+import psutil
+
+try:
+    from ctypes import cast, POINTER
+    from comtypes import CLSCTX_ALL
+    from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+except ImportError:
+    pass
+
+try:
+    import screen_brightness_control as sbc
+except ImportError:
+    sbc = None
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
@@ -53,7 +66,41 @@ WEBSITE_REGISTRY = {
     "amazon":    "https://www.amazon.in",
     "flipkart":  "https://www.flipkart.com",
     "netflix":   "https://www.netflix.com",
+    "netflix":   "https://www.netflix.com",
     "gmail":     "https://mail.google.com",
+}
+
+# ---------------------------------------------------------------------------
+# Registry: search URLs
+# ---------------------------------------------------------------------------
+SEARCH_REGISTRY = {
+    "youtube": "https://www.youtube.com/results?search_query={}",
+    "google": "https://www.google.com/search?q={}",
+    "github": "https://github.com/search?q={}",
+    "linkedin": "https://www.linkedin.com/search/results/all/?keywords={}",
+    "facebook": "https://www.facebook.com/search/top/?q={}",
+    "reddit": "https://www.reddit.com/search/?q={}",
+}
+
+# ---------------------------------------------------------------------------
+# Registry: Folder Aliases
+# ---------------------------------------------------------------------------
+FOLDER_ALIASES = {
+    "downloads": "Downloads",
+    "my downloads": "Downloads",
+    "documents": "Documents",
+    "my documents": "Documents",
+    "desktop": "Desktop",
+    "my desktop": "Desktop",
+    "pictures": "Pictures",
+    "my pictures": "Pictures",
+    "videos": "Videos",
+    "my videos": "Videos",
+    "music": "Music",
+    "my music": "Music",
+    "file explorer": "explorer",
+    "explorer": "explorer",
+    "my files": "explorer"
 }
 
 # ---------------------------------------------------------------------------
@@ -94,31 +141,103 @@ _CLOSE_VERBS = ("close", "exit", "quit", "stop", "kill", "end", "shut")
 
 
 def parse_open_close_command(command: str):
-    """Return (action, target_name) or (None, None).
+    """Return (action, target_name, query) or (None, None, None).
 
-    action is ``"open"`` or ``"close"``.
+    action is ``"open"``, ``"search"``, or ``"close"``.
     target_name is the lowercased, stripped entity name.
+    query is the extracted search string (if any).
     """
     text = command.lower().strip()
 
     # Remove filler words that speech recognition may add
-    text = re.sub(r"\b(the|a|an|my|please|can you|could you|jarvis)\b", "", text).strip()
+    text = re.sub(r"\b(the|a|an|my|please|can you|could you|jarvis)\b", "", text)
+    # Collapse multiple spaces
+    text = re.sub(r"\s+", " ", text).strip()
     # Remove trailing "tab" / "window" / "application" / "app"
     text = re.sub(r"\s+(tab|window|application|app)$", "", text).strip()
 
-    for verb in _CLOSE_VERBS:
-        pattern = rf"^{verb}\s+(.+)"
-        m = re.match(pattern, text)
-        if m:
-            return ("close", m.group(1).strip())
+    # 1. System checks (Battery)
+    if any(phrase in text for phrase in ["battery", "how much battery"]):
+        return ("check", "battery", None)
+
+    # 2. Set Volume / Brightness
+    if "mute" in text and "unmute" not in text:
+        return ("set", "volume", "mute")
+    if "unmute" in text or "turn volume on" in text:
+        return ("set", "volume", "unmute")
+    
+    m = re.search(r"set (volume|brightness)(?: to)? (\d+)", text)
+    if m:
+        return ("set", m.group(1), int(m.group(2)))
+    
+    m = re.search(r"(volume|brightness) (\d+)", text)
+    if m:
+        return ("set", m.group(1), int(m.group(2)))
+        
+    if "increase volume" in text or "turn up volume" in text or "volume up" in text:
+        return ("set", "volume", "+10")
+    if "decrease volume" in text or "turn down volume" in text or "volume down" in text:
+        return ("set", "volume", "-10")
+        
+    if "increase brightness" in text or "brightness up" in text:
+        return ("set", "brightness", "+10")
+    if "decrease brightness" in text or "brightness down" in text:
+        return ("set", "brightness", "-10")
+
+    # 3. Create folder
+    m = re.match(r"^(?:create|make)(?: a)? folder (?:named |called )?(.+)$", text)
+    if m:
+        return ("create", "folder", m.group(1).strip())
+        
+    # 4. Find file
+    m = re.match(r"^find(?: my)? (.+?)(?: files?| folder)?$", text)
+    if m and not m.group(1).strip() in ["file", "files", "folder", "my file"]:
+        return ("find", "file", m.group(1).strip())
+
+    # 5. Search X on/in Y
+    m = re.match(r"^search\s+(.+?)\s+(?:on|in)\s+(.+)$", text)
+    if m:
+        return ("search", m.group(2).strip(), m.group(1).strip())
 
     for verb in _OPEN_VERBS:
-        pattern = rf"^{verb}\s+(.+)"
+        # 2. Open Y and search X
+        m = re.match(rf"^{verb}\s+(.+?)\s+and\s+search\s+(.+)$", text)
+        if m:
+            return ("open", m.group(1).strip(), m.group(2).strip())
+            
+        # 3. Open Y search X
+        m = re.match(rf"^{verb}\s+(.+?)\s+search\s+(.+)$", text)
+        if m:
+            return ("open", m.group(1).strip(), m.group(2).strip())
+
+    # 7. Open Y X (Implicit search)
+    for verb in _OPEN_VERBS:
+        m = re.match(rf"^{verb}\s+(.+)$", text)
+        if m:
+            remainder = m.group(1).strip()
+            
+            # Sort known targets by length descending to match longest first
+            all_targets = list(WEBSITE_REGISTRY.keys()) + list(APP_REGISTRY.keys()) + list(BROWSER_NAMES)
+            all_targets += list(FOLDER_ALIASES.keys())
+            all_targets += ["git hub", "linked in", "what's app", "face book", "you tube", "v s code"]
+            all_targets.sort(key=len, reverse=True)
+            
+            for t in all_targets:
+                if remainder == t:
+                    return ("open", t, None)
+                elif remainder.startswith(t + " "):
+                    query = remainder[len(t):].strip()
+                    return ("open", t, query)
+                    
+            return ("open", remainder, None)
+
+    for verb in _CLOSE_VERBS:
+        pattern = rf"^{verb}\s+(.+)$"
         m = re.match(pattern, text)
         if m:
-            return ("open", m.group(1).strip())
+            return ("close", m.group(1).strip(), None)
 
-    return (None, None)
+    return (None, None, None)
 
 
 def _resolve_user_path(path: str) -> str:
@@ -411,14 +530,146 @@ class AppController:
         self._tab_handles.clear()
 
     # ------------------------------------------------------------------
+    # Smart PC Control Helpers
+    # ------------------------------------------------------------------
+    def get_audio_volume(self):
+        try:
+            devices = AudioUtilities.GetSpeakers()
+            interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+            return cast(interface, POINTER(IAudioEndpointVolume))
+        except Exception:
+            return None
+
+    def change_volume(self, arg):
+        vol = self.get_audio_volume()
+        if not vol:
+            return "Volume control is not available."
+            
+        try:
+            if arg == "mute":
+                vol.SetMute(1, None)
+                return "Computer muted."
+            elif arg == "unmute":
+                vol.SetMute(0, None)
+                return "Computer unmuted."
+            
+            current_vol = vol.GetMasterVolumeLevelScalar()
+            if isinstance(arg, int):
+                target_vol = max(0, min(100, arg)) / 100.0
+                vol.SetMasterVolumeLevelScalar(target_vol, None)
+                return f"Volume set to {arg} percent."
+            elif arg == "+10":
+                target_vol = min(1.0, current_vol + 0.1)
+                vol.SetMasterVolumeLevelScalar(target_vol, None)
+                return "Volume increased."
+            elif arg == "-10":
+                target_vol = max(0.0, current_vol - 0.1)
+                vol.SetMasterVolumeLevelScalar(target_vol, None)
+                return "Volume decreased."
+        except Exception:
+            return "Failed to change volume."
+
+    def change_brightness(self, arg):
+        if sbc is None:
+            return "Brightness control is not available on this computer."
+            
+        try:
+            if isinstance(arg, int):
+                sbc.set_brightness(arg)
+                return f"Brightness set to {arg} percent."
+            
+            current = sbc.get_brightness()
+            if not current:
+                return "Brightness control is not available on this computer."
+            current = current[0]
+            
+            if arg == "+10":
+                sbc.set_brightness(min(100, current + 10))
+                return "Brightness increased."
+            elif arg == "-10":
+                sbc.set_brightness(max(0, current - 10))
+                return "Brightness decreased."
+        except Exception:
+            return "Brightness control is not available on this computer."
+
+    def get_battery(self):
+        try:
+            battery = psutil.sensors_battery()
+            if not battery:
+                return "I couldn't detect a battery on this computer."
+            percent = int(battery.percent)
+            plugged = battery.power_plugged
+            if plugged:
+                return f"Your battery is at {percent} percent and the computer is charging."
+            else:
+                return f"Your battery is at {percent} percent."
+        except Exception:
+            return "I couldn't read the battery status."
+
+    def open_folder(self, folder_name):
+        try:
+            home = os.path.expanduser("~")
+            target_path = os.path.join(home, folder_name)
+            if folder_name.lower() == "explorer":
+                target_path = home
+                
+            if os.path.exists(target_path):
+                os.startfile(target_path)
+                return f"Opening {folder_name}."
+            else:
+                return f"I couldn't find the {folder_name} folder."
+        except Exception:
+            return f"Failed to open {folder_name}."
+
+    def create_folder(self, folder_name):
+        try:
+            target_path = os.path.join(os.path.expanduser("~"), "Documents", folder_name)
+            if os.path.exists(target_path):
+                return f"The {folder_name} folder already exists."
+            os.makedirs(target_path, exist_ok=False)
+            return f"Created the {folder_name} folder."
+        except Exception:
+            return f"Failed to create the {folder_name} folder."
+
+    def find_file(self, query):
+        try:
+            home = os.path.expanduser("~")
+            search_dirs = [
+                os.path.join(home, "Desktop"),
+                os.path.join(home, "Documents"),
+                os.path.join(home, "Downloads")
+            ]
+            
+            matches = []
+            for d in search_dirs:
+                if not os.path.exists(d):
+                    continue
+                for root, dirs, files in os.walk(d):
+                    for file in files:
+                        if query.lower() in file.lower():
+                            matches.append(file)
+                    # Limit depth to 2 to prevent excessive searching
+                    if root.count(os.sep) - d.count(os.sep) > 2:
+                        del dirs[:]
+            
+            if not matches:
+                return f"I couldn't find your {query}."
+            elif len(matches) == 1:
+                return f"I found your {query}."
+            else:
+                return f"I found {len(matches)} files matching {query}."
+        except Exception:
+            return "An error occurred while searching for the file."
+
+    # ------------------------------------------------------------------
     # High-level handler called from main.py
     # ------------------------------------------------------------------
     def handle_command(self, command: str, speak_fn) -> bool:
-        """Try to handle an open/close command.
+        """Try to handle an open/search/close command.
 
         Returns True if the command was handled, False otherwise.
         """
-        action, target = parse_open_close_command(command)
+        action, target, query = parse_open_close_command(command)
         if action is None:
             return False
 
@@ -436,41 +687,96 @@ class AppController:
             "vs code": "vs code",
             "visual studio code": "vs code",
             "v l c": "vlc",
+            "google chrome": "chrome"
         }
         target_key = alias_map.get(target_key, target_key)
         display_name = target.title()
 
-        # ----- OPEN -------------------------------------------------
-        if action == "open":
-            # Browser itself?
-            if target_key in BROWSER_NAMES:
-                speak_fn(f"Opening {display_name}.")
-                try:
-                    self._ensure_driver()
-                    return True
-                except RuntimeError:
-                    speak_fn(f"Sorry, I could not open {display_name}.")
-                    return True
+        # ----- SMART PC CONTROL -------------------------------------
+        if action == "check" and target == "battery":
+            speak_fn(self.get_battery())
+            return True
+            
+        if action == "set" and target == "volume":
+            speak_fn(self.change_volume(query))
+            return True
+            
+        if action == "set" and target == "brightness":
+            speak_fn(self.change_brightness(query))
+            return True
+            
+        if action == "create" and target == "folder":
+            speak_fn(self.create_folder(query))
+            return True
+            
+        if action == "find" and target == "file":
+            speak_fn(self.find_file(query))
+            return True
 
-            # Known website?
-            if target_key in WEBSITE_REGISTRY:
-                speak_fn(f"Opening {display_name}.")
-                if self.open_website(target_key):
-                    return True
+        if action == "open" and target_key in FOLDER_ALIASES:
+            folder_name = FOLDER_ALIASES[target_key]
+            speak_fn(self.open_folder(folder_name))
+            return True
+
+        # ----- OPEN / SEARCH ----------------------------------------
+        if action in ("open", "search"):
+            import urllib.parse
+            
+            # 1. Handle Search with a Query
+            if query:
+                search_url_template = SEARCH_REGISTRY.get(target_key)
+                if not search_url_template and target_key in BROWSER_NAMES:
+                    search_url_template = SEARCH_REGISTRY["google"]
+                
+                if search_url_template:
+                    final_url = search_url_template.format(urllib.parse.quote_plus(query))
+                    if action == "search":
+                        speak_fn(f"Searching {display_name} for {query}.")
+                    else:
+                        speak_fn(f"Opening {display_name} and searching for {query}.")
+                    
+                    if target_key in BROWSER_NAMES or target_key in WEBSITE_REGISTRY:
+                        # Open it in browser
+                        self.open_website(target_key, url=final_url)
+                        return True
                 else:
-                    speak_fn(f"Sorry, I could not open {display_name}.")
-                    return True
-
-            # Known desktop app?
-            if target_key in APP_REGISTRY:
-                result = self.open_app(target_key)
-                if result == "opened":
+                    # Target doesn't support search
+                    if action == "search":
+                        speak_fn(f"I cannot search in {display_name}.")
+                        return True
+                    # If it was "open", we just drop the query and continue to open it normally.
+            
+            # 2. Normal Open (No query, or query ignored because search not supported)
+            if action == "open":
+                # Browser itself?
+                if target_key in BROWSER_NAMES:
                     speak_fn(f"Opening {display_name}.")
-                elif result == "already_open":
-                    speak_fn(f"{display_name} is already open.")
-                else:
-                    speak_fn(f"Sorry, I could not open {display_name}.")
-                return True
+                    try:
+                        self._ensure_driver()
+                        return True
+                    except RuntimeError:
+                        speak_fn(f"Google Chrome is not installed on this computer.")
+                        return True
+
+                # Known website?
+                if target_key in WEBSITE_REGISTRY:
+                    speak_fn(f"Opening {display_name}.")
+                    if self.open_website(target_key):
+                        return True
+                    else:
+                        speak_fn(f"Sorry, I could not open {display_name}.")
+                        return True
+
+                # Known desktop app?
+                if target_key in APP_REGISTRY:
+                    result = self.open_app(target_key)
+                    if result == "opened":
+                        speak_fn(f"Opening {display_name}.")
+                    elif result == "already_open":
+                        speak_fn(f"{display_name} is already open.")
+                    else:
+                        speak_fn(f"Sorry, I could not open {display_name}.")
+                    return True
 
             # Unknown target — not handled
             return False
