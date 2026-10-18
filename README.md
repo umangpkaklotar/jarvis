@@ -35,7 +35,7 @@ JARVIS is a desktop voice assistant that uses **Google Speech Recognition** to l
 
 ```
 ┌─────────────────────────────────────┐
-│        Start: python main.py        │
+│     Start: python backend/main.py   │
 └──────────────┬──────────────────────┘
                │
                ▼
@@ -93,22 +93,27 @@ JARVIS is a desktop voice assistant that uses **Google Speech Recognition** to l
 
 ```
 jarvis/
-├── .gitignore              # Git ignore rules
-├── README.md               # Project documentation
-├── requirements.txt        # Python dependencies
-├── main.py                 # Entry point — voice loop & command processor
-├── musicLibrary.py         # Custom song name → YouTube URL mapping
-├── weather.py              # Weather module (Open-Meteo API)
-├── app_control.py          # Application control utilities (WIP)
-├── modules/
-│   ├── __init__.py         # Package init
-│   └── browser.py          # Browser utilities (WIP)
-├── templates/
-│   └── index.html          # Web UI template
-└── static/
-    ├── style.css           # Web UI styles
-    └── script.js           # Web UI scripts
+├── frontend/               # React + Vite activation UI
+│   ├── public/
+│   ├── src/                 # React app, original styles and activation behavior
+│   ├── index.html
+│   ├── package.json
+│   └── vite.config.js
+├── backend/                # Existing Python voice assistant
+│   ├── main.py
+│   ├── app_control.py
+│   ├── phone_control.py
+│   ├── weather.py
+│   ├── musicLibrary.py
+│   ├── modules/
+│   ├── requirements.txt
+│   └── .env                 # Local configuration (not committed)
+├── jarvis_phone/            # Existing Android phone-control app
+├── .gitignore
+└── README.md
 ```
+
+The React interface preserves the existing browser-based activation greeting. The Python voice assistant runs separately; the existing project does not include an HTTP API connecting the two applications.
 
 ---
 
@@ -116,7 +121,8 @@ jarvis/
 
 ### Prerequisites
 
-- **Python 3.8+** installed
+- **Python 3.10+** installed
+- **Node.js 18+** and npm installed
 - **Windows OS** (uses Windows-specific system commands)
 - A working **microphone**
 
@@ -129,24 +135,36 @@ git clone https://github.com/umangpkaklotar/jarvis.git
 cd jarvis
 ```
 
-**2. Create a virtual environment (recommended)**
+**2. Create and activate a Python virtual environment (PowerShell)**
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate
+.\.venv\Scripts\Activate.ps1
 ```
 
 **3. Install dependencies**
 
 ```bash
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
 ```
 
 **4. Run the assistant**
 
 ```bash
-python main.py
+python backend/main.py
 ```
+
+**5. Start the React + Vite frontend** (in a second terminal)
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open the local URL printed by Vite. To create a production frontend build, run `npm run build` from `frontend/`.
+
+The Python assistant and frontend are separate processes: start the Python voice loop with `python backend/main.py` from the repository root, and start Vite separately as above. No frontend-to-Python API is currently defined.
 
 ---
 
@@ -206,7 +224,7 @@ python main.py
 "Take a Screenshot"
 ```
 
-> Saved as `screenshot.png` in the project root.
+> Saved as `backend/screenshot.png`.
 
 ### 💻 Applications
 
@@ -237,7 +255,7 @@ python main.py
 
 ## 🎵 Custom Music Library
 
-Edit [musicLibrary.py](musicLibrary.py) to add your own songs:
+Edit [backend/musicLibrary.py](backend/musicLibrary.py) to add your own songs:
 
 ```python
 music = {
@@ -313,10 +331,10 @@ Feel free to fork, modify, and improve it.
 2. Open the **JARVIS Phone** app on your Android device.
 3. The Android app will display its IP address on the screen.
 4. Copy that IP address.
-5. Open the `.env` file on your PC.
-6. Set `PHONE_IP=<phone IP shown in Android app>`.
+5. Open `backend/.env` on your PC.
+6. Set `PHONE_IP=<phone IP shown in Android app>` in `backend/.env`.
 7. Ensure `PHONE_PORT=8080`.
 8. Ensure `PHONE_TOKEN` matches the secure token configured in the Android app.
-9. Start Jarvis using: `python main.py`
+9. Start Jarvis using: `python backend/main.py` from the repository root.
 10. Say: **"Check my phone connection"**
 11. Jarvis will verbally confirm if the connection is successful!

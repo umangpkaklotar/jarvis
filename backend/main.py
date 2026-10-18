@@ -11,7 +11,7 @@ import platform
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 from app_control import AppController, parse_open_close_command, open_in_chrome
 import phone_control
 
@@ -131,7 +131,7 @@ def processCommand(c):
    elif "take a screenshot" in c_lower:
     speak("Taking a screenshot.")
     image = pyautogui.screenshot()
-    image.save("screenshot.png")
+    image.save(os.path.join(os.path.dirname(__file__), "screenshot.png"))
     speak("Screenshot saved.")
 
    elif "open desktop" in c_lower:

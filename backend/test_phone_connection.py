@@ -4,7 +4,7 @@ import socket
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 PHONE_IP = os.getenv("PHONE_IP")
 PHONE_PORT = os.getenv("PHONE_PORT", "8080")

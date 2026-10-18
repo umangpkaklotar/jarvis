@@ -19,6 +19,11 @@ venv/
 ENV/
 env/
 
+# Frontend dependencies and build output
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
 # ===========================
 # IDE / Editor
 # ===========================
@@ -61,6 +66,7 @@ screenshot.png
 # Environment variables / secrets
 .env
 *.env
+backend/.env
 
 # Logs
 *.log
